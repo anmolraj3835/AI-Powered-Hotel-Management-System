@@ -3,11 +3,9 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { normalizeRole, type Profile } from '@/types/database';
 
-export function useAuth() {
-  const {
-    user, session, profile, role, isLoading, isInitialized,
-    setUser, setSession, setProfile, setLoading, setInitialized, clearAuth
-  } = useAuthStore();
+/** Run ONLY ONCE at the top-level App component */
+export function useInitAuth() {
+  const { setUser, setSession, setProfile, setLoading, setInitialized, clearAuth } = useAuthStore();
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -25,7 +23,10 @@ export function useAuth() {
   }, [setProfile]);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -37,6 +38,7 @@ export function useAuth() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -49,8 +51,38 @@ export function useAuth() {
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile, clearAuth, setInitialized, setLoading, setSession, setUser]);
+}
+
+/** Pure hook for components to access auth state */
+export function useAuth() {
+  const user = useAuthStore((s) => s.user);
+  const session = useAuthStore((s) => s.session);
+  const profile = useAuthStore((s) => s.profile);
+  const role = useAuthStore((s) => s.role);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+  const setProfile = useAuthStore((s) => s.setProfile);
+
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      const raw = data as Profile & { role: string };
+      setProfile({ ...raw, role: normalizeRole(raw.role) });
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+    }
+  }, [setProfile]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

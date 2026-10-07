@@ -31,20 +31,18 @@ export const useAuthStore = create<AuthState>()(
 
       setUser: (user) => set({ user }),
       setSession: (session) => {
-        set({ session });
+        let role: UserRole = 'CUSTOMER';
         if (session) {
           try {
             const payload = JSON.parse(atob(session.access_token.split('.')[1]));
-            const role = normalizeRole((payload.app_role as string) || payload.role);
-            set({ role });
+            role = normalizeRole((payload.app_role as string) || payload.role);
           } catch {
-            set({ role: 'CUSTOMER' });
+            role = 'CUSTOMER';
           }
-        } else {
-          set({ role: 'CUSTOMER' });
         }
+        set({ session, role });
       },
-      setProfile: (profile) => set({ profile, role: profile?.role || get().role }),
+      setProfile: (profile) => set((state) => ({ profile, role: profile?.role || state.role })),
       setLoading: (isLoading) => set({ isLoading }),
       setInitialized: (isInitialized) => set({ isInitialized }),
 

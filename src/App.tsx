@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, useInitAuth } from '@/hooks/useAuth';
 import AppLayout from '@/components/layout/AppLayout';
 import LoadingScreen from '@/components/ui/LoadingScreen';
 
@@ -85,7 +85,7 @@ function DashboardRedirect() {
 
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
-  useAuth(); // initialise auth on mount
+  useInitAuth(); // initialise auth on mount once
 
   return (
     <BrowserRouter>

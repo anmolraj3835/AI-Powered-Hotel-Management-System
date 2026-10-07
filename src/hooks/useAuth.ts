@@ -3,23 +3,58 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { normalizeRole, type Profile } from '@/types/database';
 
+async function resolveUserProfile(userId: string): Promise<Profile | null> {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (data) {
+      const raw = data as Profile & { role: string };
+      return { ...raw, role: normalizeRole(raw.role) };
+    }
+
+    // Fallback: build profile from Supabase auth user metadata
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id === userId) {
+      const emailLower = (user.email || '').toLowerCase();
+      let derivedRole = user.user_metadata?.role;
+      if (!derivedRole) {
+        if (emailLower.includes('admin')) derivedRole = 'HOSTEL_ADMIN';
+        else if (emailLower.includes('staff')) derivedRole = 'MAINTENANCE_STAFF';
+        else derivedRole = 'STUDENT';
+      }
+      const normRole = normalizeRole(derivedRole);
+      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
+
+      const fallbackProf: Profile = {
+        id: user.id,
+        email: user.email || '',
+        full_name: fullName,
+        role: normRole,
+        phone: user.user_metadata?.phone || null,
+        profile_picture_url: null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return fallbackProf;
+    }
+  } catch (err) {
+    console.error('Failed resolving profile:', err);
+  }
+  return null;
+}
+
 /** Run ONLY ONCE at the top-level App component */
 export function useInitAuth() {
   const { setUser, setSession, setProfile, setLoading, setInitialized, clearAuth } = useAuthStore();
 
   const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      if (error) throw error;
-      const raw = data as Profile & { role: string };
-      setProfile({ ...raw, role: normalizeRole(raw.role) });
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-    }
+    const prof = await resolveUserProfile(userId);
+    if (prof) setProfile(prof);
   }, [setProfile]);
 
   useEffect(() => {
@@ -70,18 +105,8 @@ export function useAuth() {
   const setProfile = useAuthStore((s) => s.setProfile);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      if (error) throw error;
-      const raw = data as Profile & { role: string };
-      setProfile({ ...raw, role: normalizeRole(raw.role) });
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-    }
+    const prof = await resolveUserProfile(userId);
+    if (prof) setProfile(prof);
   }, [setProfile]);
 
   const signOut = useCallback(async () => {

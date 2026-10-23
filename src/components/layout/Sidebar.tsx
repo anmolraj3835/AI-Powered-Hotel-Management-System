@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, BedDouble, ConciergeBell, Receipt, LogOut,
-  Building, CalendarCheck, Wrench
+  Building, CalendarCheck, Wrench, Users,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import toast from 'react-hot-toast';
@@ -34,8 +34,14 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const roleLabel: Record<string, string> = {
     CUSTOMER: 'Guest',
-    STAFF: 'Staff',
-    ADMIN: 'Manager',
+    STAFF: 'Staff Operator',
+    ADMIN: 'Hotel Admin',
+  };
+
+  const roleColor: Record<string, string> = {
+    CUSTOMER: '#2563eb',
+    STAFF: '#059669',
+    ADMIN: '#7c3aed',
   };
 
   return (
@@ -51,9 +57,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       </div>
 
       <div className="sidebar-nav">
+        {/* GUEST PORTAL */}
         {isCustomer && (
           <div className="sidebar-section">
-            <div className="sidebar-section-title">Guest</div>
+            <div className="sidebar-section-title">Guest Portal</div>
             <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
               <LayoutDashboard size={18} />
               Dashboard
@@ -73,9 +80,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           </div>
         )}
 
+        {/* STAFF PORTAL */}
         {isStaff && (
           <div className="sidebar-section">
-            <div className="sidebar-section-title">Operations</div>
+            <div className="sidebar-section-title">Staff Operations</div>
             <NavLink to="/staff" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
               <Wrench size={18} />
               Duty Dashboard
@@ -83,6 +91,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           </div>
         )}
 
+        {/* ADMIN PORTAL */}
         {isAdmin && (
           <div className="sidebar-section">
             <div className="sidebar-section-title">Administration</div>
@@ -98,6 +107,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
               <CalendarCheck size={18} />
               Bookings
             </NavLink>
+            <NavLink to="/admin/staff" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Users size={18} />
+              Staff
+            </NavLink>
           </div>
         )}
       </div>
@@ -112,14 +125,14 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           Sign Out
         </button>
         <div className="user-card" style={{ marginTop: '8px' }}>
-          <div className="user-avatar">
+          <div className="user-avatar" style={{ background: roleColor[role] || '#2563eb' }}>
             {profile?.profile_picture_url
               ? <img src={profile.profile_picture_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               : initials
             }
           </div>
           <div className="user-info">
-            <div className="user-name">{profile?.full_name || 'Loading...'}</div>
+            <div className="user-name">{profile?.full_name || 'Active User'}</div>
             <div className="user-role">{roleLabel[role] || role}</div>
           </div>
         </div>

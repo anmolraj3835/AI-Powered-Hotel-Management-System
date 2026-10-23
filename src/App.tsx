@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, memo, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuth, useInitAuth } from '@/hooks/useAuth';
@@ -27,23 +27,15 @@ const AdminStaffPage        = lazy(() => import('@/pages/admin/AdminStaffPage'))
 // ── Route Guards ───────────────────────────────────────────────────────────
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isInitialized } = useAuth();
-  if (!isInitialized || isLoading) return <LoadingScreen />;
+  if (!isInitialized && isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
-  return <>{children}</>;
-}
-
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized, isAdmin } = useAuth();
-  if (!isInitialized || isLoading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized } = useAuth();
-  if (!isInitialized || isLoading) return <LoadingScreen />;
-  if (user) return <Navigate to="/dashboard" replace />;
+  const { user, isLoading, isInitialized, homePath } = useAuth();
+  if (!isInitialized && isLoading) return <>{children}</>;
+  if (user) return <Navigate to={homePath} replace />;
   return <>{children}</>;
 }
 
@@ -75,17 +67,17 @@ function OfflineBanner() {
   );
 }
 
-// ── Dashboard redirect by role ─────────────────────────────────────────────
-function DashboardRedirect() {
+// ── Dashboard redirect by role ─
+const DashboardRedirect = memo(function DashboardRedirect() {
   const { isAdmin, isStaff } = useAuth();
-  if (isAdmin)  return <AdminDashboard />;
-  if (isStaff)  return <StaffDashboard />;
+  if (isAdmin) return <AdminDashboard />;
+  if (isStaff) return <StaffDashboard />;
   return <CustomerDashboard />;
-}
+});
 
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
-  useInitAuth(); // initialise auth on mount once
+  useInitAuth();
 
   return (
     <BrowserRouter>
@@ -93,7 +85,7 @@ export default function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 4000,
+          duration: 3500,
           style: {
             background: '#1f2937',
             color: '#f9fafb',
@@ -114,28 +106,27 @@ export default function App() {
           <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
           <Route path="/reset-password"  element={<ResetPasswordPage />} />
 
-          {/* ── Protected (authenticated) ──────────────────────── */}
+          {/* ── Protected Portal Routes ────────────────────────── */}
           <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route index                  element={<Navigate to="/dashboard" replace />} />
+            <Route index                  element={<DashboardRedirect />} />
             <Route path="dashboard"       element={<DashboardRedirect />} />
             <Route path="profile"         element={<ProfilePage />} />
             <Route path="notifications"   element={<NotificationsPage />} />
 
-            {/* Customer routes */}
+            {/* 1. USER / GUEST SITE */}
+            <Route path="user"            element={<CustomerDashboard />} />
             <Route path="rooms"           element={<RoomCatalogPage />} />
             <Route path="requests/new"    element={<NewServiceRequestPage />} />
             <Route path="bill"            element={<BillPage />} />
 
-            {/* Staff routes */}
+            {/* 2. STAFF SITE */}
             <Route path="staff"           element={<StaffDashboard />} />
 
-            {/* Admin routes */}
-            <Route path="admin">
-              <Route index               element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-              <Route path="rooms"        element={<AdminRoute><AdminRoomsPage /></AdminRoute>} />
-              <Route path="bookings"     element={<AdminRoute><AdminBookingsPage /></AdminRoute>} />
-              <Route path="staff"        element={<AdminRoute><AdminStaffPage /></AdminRoute>} />
-            </Route>
+            {/* 3. ADMIN SITE */}
+            <Route path="admin"           element={<AdminDashboard />} />
+            <Route path="admin/rooms"     element={<AdminRoomsPage />} />
+            <Route path="admin/bookings"  element={<AdminBookingsPage />} />
+            <Route path="admin/staff"     element={<AdminStaffPage />} />
           </Route>
 
           {/* Fallback */}

@@ -1,4 +1,22 @@
+import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/store/authStore';
+
 export default function LoadingScreen() {
+  const [showSkip, setShowSkip] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSkip(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleSkip = () => {
+    const store = useAuthStore.getState();
+    store.setLoading(false);
+    store.setInitialized(true);
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
@@ -20,7 +38,34 @@ export default function LoadingScreen() {
           borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto'
         }} />
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {showSkip && (
+        <div style={{ marginTop: '12px', textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
+          <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '8px' }}>
+            Taking longer than usual?
+          </p>
+          <button
+            onClick={handleSkip}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: '#2563eb',
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            Continue to App →
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }

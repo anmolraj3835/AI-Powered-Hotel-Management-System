@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
-import { BedDouble, ClipboardList, Bell, CreditCard } from 'lucide-react';
+import { supabase, isSupabaseOffline } from '@/lib/supabase';
+import { MockDB } from '@/lib/mockData';
+import { BedDouble, ClipboardList, CreditCard, WifiOff } from 'lucide-react';
 import type { Booking, ServiceRequest } from '@/types/database';
 
 export default function CustomerDashboard() {
@@ -10,38 +11,63 @@ export default function CustomerDashboard() {
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const offline = isSupabaseOffline;
 
   useEffect(() => {
     async function load() {
-      if (!profile) return;
-      const [bookingRes, reqRes] = await Promise.all([
-        supabase
-          .from('bookings')
-          .select('*, rooms(*)')
-          .eq('customer_id', profile.id)
-          .in('status', ['CONFIRMED', 'CHECKED_IN'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('service_requests')
-          .select('*')
-          .eq('customer_id', profile.id)
-          .neq('status', 'COMPLETED')
-          .order('created_at', { ascending: false })
-          .limit(5),
-      ]);
-      setActiveBooking(bookingRes.data as Booking | null);
-      setRequests((reqRes.data ?? []) as ServiceRequest[]);
-      setLoading(false);
+      if (!profile) { setLoading(false); return; }
+
+      if (offline || profile.id.startsWith('demo-')) {
+        const bookings = MockDB.getBookingsByCustomer(profile.id, ['CONFIRMED', 'CHECKED_IN']);
+        setActiveBooking(bookings[0] ?? null);
+        setRequests(MockDB.getRequestsByCustomer(profile.id).slice(0, 5));
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const [bookingRes, reqRes] = await Promise.all([
+          supabase
+            .from('bookings')
+            .select('*, rooms(*)')
+            .eq('customer_id', profile.id)
+            .in('status', ['CONFIRMED', 'CHECKED_IN'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('service_requests')
+            .select('*')
+            .eq('customer_id', profile.id)
+            .neq('status', 'COMPLETED')
+            .order('created_at', { ascending: false })
+            .limit(5),
+        ]);
+        setActiveBooking(bookingRes.data as Booking | null);
+        setRequests((reqRes.data ?? []) as ServiceRequest[]);
+      } catch {
+        // Fallback to mock
+        const bookings = MockDB.getBookingsByCustomer(profile.id, ['CONFIRMED', 'CHECKED_IN']);
+        setActiveBooking(bookings[0] ?? null);
+        setRequests(MockDB.getRequestsByCustomer(profile.id).slice(0, 5));
+      } finally {
+        setLoading(false);
+      }
     }
     load();
-  }, [profile]);
+  }, [profile, offline]);
 
   if (loading) return <div className="page-loading">Loading your dashboard…</div>;
 
   return (
     <div className="page-content">
+      {offline && (
+        <div className="alert alert-warning" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <WifiOff size={16} />
+          <span><strong>Demo Mode</strong> — Showing sample data. Connect Supabase to use live data.</span>
+        </div>
+      )}
+
       <div className="page-header">
         <h1>Welcome back, {profile?.full_name?.split(' ')[0] ?? 'Guest'} 👋</h1>
         <p>Here is your stay overview.</p>
@@ -50,7 +76,7 @@ export default function CustomerDashboard() {
       <div className="stat-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card" style={{ '--stat-accent': '#2563eb', '--stat-bg': '#eff6ff' } as React.CSSProperties}>
           <div className="stat-card-icon"><BedDouble size={22} /></div>
-          <div className="stat-card-value">{activeBooking ? `Room ${activeBooking.rooms?.room_number ?? '—'}` : 'No Active Stay'}</div>
+          <div className="stat-card-value">{activeBooking ? `Room ${(activeBooking.rooms as { room_number?: string } | undefined)?.room_number ?? '—'}` : 'No Stay'}</div>
           <div className="stat-card-label">Current Room</div>
         </div>
         <div className="stat-card" style={{ '--stat-accent': '#f59e0b', '--stat-bg': '#fffbeb' } as React.CSSProperties}>
@@ -73,7 +99,7 @@ export default function CustomerDashboard() {
           </div>
           <div className="card-body">
             <div className="form-grid">
-              <div><strong>Room</strong><p>{activeBooking.rooms?.room_number} — {activeBooking.rooms?.room_type}</p></div>
+              <div><strong>Room</strong><p>{(activeBooking.rooms as { room_number?: string; room_type?: string } | undefined)?.room_number} — {(activeBooking.rooms as { room_type?: string } | undefined)?.room_type}</p></div>
               <div><strong>Check-In</strong><p>{new Date(activeBooking.check_in).toLocaleDateString()}</p></div>
               <div><strong>Check-Out</strong><p>{new Date(activeBooking.check_out).toLocaleDateString()}</p></div>
               <div><strong>Status</strong><p><span className="badge badge-success">{activeBooking.status}</span></p></div>
@@ -91,7 +117,7 @@ export default function CustomerDashboard() {
 
       <div className="card">
         <div className="card-header">
-          <span className="card-title"><Bell size={18} /> Recent Service Requests</span>
+          <span className="card-title">Recent Service Requests</span>
           <Link to="/requests/new" className="btn btn-sm btn-primary">+ New Request</Link>
         </div>
         <div className="card-body">
@@ -99,14 +125,14 @@ export default function CustomerDashboard() {
             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '1rem 0' }}>No open requests.</p>
           ) : (
             <table className="table">
-              <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Date</th></tr></thead>
+              <thead><tr><th>Title</th><th>Category</th><th>Status</th><th className="hide-mobile">Date</th></tr></thead>
               <tbody>
                 {requests.map(r => (
                   <tr key={r.id}>
                     <td>{r.title}</td>
-                    <td><span className="badge badge-primary">{r.category}</span></td>
+                    <td><span className="badge badge-primary">{r.category.replace('_', ' ')}</span></td>
                     <td><span className={`badge badge-${r.status === 'PENDING' ? 'warning' : 'info'}`}>{r.status}</span></td>
-                    <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td className="hide-mobile">{new Date(r.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

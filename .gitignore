@@ -23,6 +23,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# One-off setup scripts with secret keys
+seed_*.js
+test_*.js
+update_passwords.js
+
 # OS
 .DS_Store
 Thumbs.db

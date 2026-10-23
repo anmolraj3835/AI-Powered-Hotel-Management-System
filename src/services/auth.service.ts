@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
 
 export interface RegisterData {
   email: string;
@@ -18,73 +19,79 @@ export const authService = {
     const { data: authData, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          full_name,
-          phone,
-          role,
-        },
-      },
+      options: { data: { full_name, phone, role } },
     });
-    if (error) throw error;
 
-    if (authData.user) {
-      await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          email,
-          full_name,
-          phone: phone || null,
-          role: role === 'HOSTEL_ADMIN' ? 'ADMIN' : role === 'MAINTENANCE_STAFF' ? 'STAFF' : 'CUSTOMER',
-          is_active: true,
-        } as never);
+    if (error && !error.message.includes('User already registered')) {
+      throw error;
     }
 
     return authData;
   },
 
   async login(email: string, password: string) {
+    // Single attempt — no fallback signup. If login fails, throw immediately.
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
     if (error) {
-      if (
-        error.message.includes('Invalid login credentials') ||
-        error.message.includes('User not found')
-      ) {
-        // Auto-register demo/new users on login for smooth experience
-        const lower = email.toLowerCase();
-        let role = 'STUDENT';
-        let full_name = 'Customer Guest';
-        if (lower.includes('admin')) {
-          role = 'HOSTEL_ADMIN';
-          full_name = 'Hotel Administrator';
-        } else if (lower.includes('staff')) {
-          role = 'MAINTENANCE_STAFF';
-          full_name = 'Duty Staff Member';
-        }
-
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name, role },
-          },
-        });
-
-        if (!signUpError && signUpData) {
-          if (signUpData.session) return signUpData;
-          const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
-          if (retryData?.session) return retryData;
-        }
+      // Provide a friendly message for common errors
+      if (error.message.toLowerCase().includes('invalid login credentials')) {
+        throw new Error('Invalid email or password');
       }
-      throw error;
+      if (error.message.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Please verify your email address before signing in');
+      }
+      throw new Error(error.message);
     }
+
+    if (!data?.session) {
+      throw new Error('Login failed — no session returned');
+    }
+
     return data;
   },
 
+  quickDemoLogin(role: 'ADMIN' | 'STAFF' | 'CUSTOMER') {
+    const store = useAuthStore.getState();
+    const isAdm = role === 'ADMIN';
+    const isStf = role === 'STAFF';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockUser: any = {
+      id: isAdm ? 'demo-admin-id' : isStf ? 'demo-staff-id' : 'demo-guest-id',
+      email: isAdm ? 'admin@hotel.com' : isStf ? 'staff@hotel.com' : 'guest@hotel.com',
+      app_metadata: {},
+      user_metadata: {
+        role,
+        full_name: isAdm ? 'Hotel Administrator' : isStf ? 'Operations Staff' : 'Guest Traveler',
+      },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    };
+
+    store.setUser(mockUser);
+    store.setRole(role);
+    store.setProfile({
+      id: mockUser.id,
+      email: mockUser.email,
+      full_name: mockUser.user_metadata.full_name,
+      role,
+      phone: '+1 555-0199',
+      profile_picture_url: null,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    store.setLoading(false);
+    store.setInitialized(true);
+  },
+
   async logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore sign-out errors
+    }
+    useAuthStore.getState().clearAuth();
   },
 
   async resetPassword(email: string) {
@@ -100,8 +107,11 @@ export const authService = {
   },
 
   async getSession() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return data.session;
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data?.session;
+    } catch {
+      return null;
+    }
   },
 };

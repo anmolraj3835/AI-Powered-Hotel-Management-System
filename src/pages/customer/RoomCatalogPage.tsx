@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseOffline } from '@/lib/supabase';
+import { MockDB } from '@/lib/mockData';
 import { useAuth } from '@/hooks/useAuth';
 import toast from 'react-hot-toast';
 import { BedDouble, Users, Check } from 'lucide-react';
@@ -13,11 +14,30 @@ export default function RoomCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState<{ roomId: string; checkIn: string; checkOut: string; guests: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const offline = isSupabaseOffline;
 
   useEffect(() => {
-    supabase.from('rooms').select('*').eq('status', 'AVAILABLE').order('room_number')
-      .then(({ data }) => { setRooms((data ?? []) as Room[]); setLoading(false); });
-  }, []);
+    async function loadRooms() {
+      if (offline) {
+        // Only use MockDB when genuinely offline (no real Supabase configured)
+        setRooms(MockDB.getRooms().filter(r => r.status === 'AVAILABLE'));
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await supabase.from('rooms').select('*').eq('status', 'AVAILABLE').order('room_number');
+        if (error) throw error;
+        // Use live data directly — even if empty (admin deleted all rooms)
+        setRooms((data ?? []) as Room[]);
+      } catch {
+        // Only on a real network failure, fall back to mock
+        setRooms(MockDB.getRooms().filter(r => r.status === 'AVAILABLE'));
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadRooms();
+  }, [offline]);
 
   const nights = booking ? Math.max(1, Math.ceil((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000)) : 0;
   const selectedRoom = rooms.find(r => r.id === booking?.roomId);
@@ -26,6 +46,25 @@ export default function RoomCatalogPage() {
   async function confirmBooking() {
     if (!booking || !profile || !selectedRoom) return;
     setSubmitting(true);
+
+    if (offline || profile.id.startsWith('demo-')) {
+      MockDB.addBooking({
+        customer_id: profile.id,
+        room_id: booking.roomId,
+        check_in: booking.checkIn,
+        check_out: booking.checkOut,
+        guest_count: booking.guests,
+        nights,
+        total_price: totalPrice,
+        status: 'CONFIRMED',
+      });
+      MockDB.updateRoom(booking.roomId, { status: 'OCCUPIED' });
+      toast.success('Room booked successfully! (Demo mode)');
+      setSubmitting(false);
+      navigate('/dashboard');
+      return;
+    }
+
     try {
       const { error } = await supabase.from('bookings').insert({
         customer_id: profile.id,
@@ -38,7 +77,6 @@ export default function RoomCatalogPage() {
         status: 'CONFIRMED',
       });
       if (error) throw error;
-      // Mark room as occupied
       await supabase.from('rooms').update({ status: 'OCCUPIED' }).eq('id', booking.roomId);
       toast.success('Room booked successfully!');
       navigate('/dashboard');

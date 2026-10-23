@@ -1322,8 +1322,77 @@ button { cursor: pointer; font-family: var(--font-sans); }
   }
 
   .navbar {
-    padding: 0 var(--space-4);
+    padding: 0 var(--space-3);
+    gap: var(--space-2);
+    height: auto;
+    min-height: var(--navbar-height);
   }
+
+  .navbar-title h1 {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .navbar-title p {
+    display: none;
+  }
+
+  /* Hide portal pill badge on mobile */
+  .portal-pill-badge {
+    display: none;
+  }
+
+  /* Compact portal switcher */
+  .portal-switcher {
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .portal-tab {
+    padding: 5px 8px;
+    font-size: 0.7rem;
+    gap: 3px;
+  }
+
+  /* Notification dropdown full-width on mobile */
+  .notification-dropdown-panel {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: 70vh;
+  }
+
+  /* Page header compact */
+  .page-header {
+    margin-bottom: var(--space-4);
+  }
+
+  .page-header h1 {
+    font-size: 1.35rem;
+  }
+
+  /* Card padding */
+  .card-header {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-4);
+  }
+
+  .card-body {
+    padding: var(--space-4);
+  }
+
+  /* Hide lower-priority table columns on mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Form grids stack */
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid-3 { grid-template-columns: 1fr; }
 }
 
 /* ============================================================
@@ -1411,4 +1480,130 @@ button { cursor: pointer; font-family: var(--font-sans); }
 @media print {
   .sidebar, .navbar { display: none; }
   .main-content { margin-left: 0; }
+}
+
+/* ============================================================
+   3-SITE PORTAL SWITCHER & QUICK ACCESS
+   ============================================================ */
+.portal-switcher {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 9999px;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.portal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.portal-tab:hover {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.portal-tab.active-user {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.portal-tab.active-staff {
+  background: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35);
+}
+
+.portal-tab.active-admin {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
+}
+
+.portal-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-portal-user {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-portal-staff {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-portal-admin {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+.quick-login-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.quick-login-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.quick-login-btn:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.quick-login-btn .btn-role-icon {
+  font-size: 1.25rem;
+  margin-bottom: 4px;
+}
+
+.quick-login-btn .btn-role-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.quick-login-btn .btn-role-sub {
+  font-size: 0.68rem;
+  color: #64748b;
 }

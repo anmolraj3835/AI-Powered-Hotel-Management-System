@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import toast from 'react-hot-toast';
-import { classifyComplaint } from '@/ml/complaintClassifier';
+import { classifyComplaintAsync } from '@/ml/complaintClassifier';
 import type { ServiceRequestCategory } from '@/types/database';
 
 const CATEGORIES: ServiceRequestCategory[] = ['HOUSEKEEPING', 'ROOM_SERVICE', 'MAINTENANCE', 'LAUNDRY', 'OTHER'];
@@ -15,6 +15,7 @@ export default function NewServiceRequestPage() {
   const [aiSuggestion, setAiSuggestion] = useState<{ category: string; confidence: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -23,34 +24,70 @@ export default function NewServiceRequestPage() {
       .then(({ data }) => setActiveBookingId(data?.id ?? null));
   }, [profile]);
 
-  // AI-powered live suggestion as user types
+  // AI-powered live suggestion — async, runs in Web Worker (no UI freeze)
   useEffect(() => {
     if (form.title.length < 5) { setAiSuggestion(null); return; }
-    const result = classifyComplaint(form.title, form.description);
-    if (result) setAiSuggestion({ category: result.category.category as string, confidence: result.category.confidence });
+
+    // Debounce: wait 400ms after the user stops typing before calling the worker
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const result = await classifyComplaintAsync(form.title, form.description);
+        setAiSuggestion({
+          category: result.category.category as string,
+          confidence: result.category.confidence,
+        });
+      } catch {
+        // Worker error — silently skip suggestion
+      }
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [form.title, form.description]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!profile) return;
+
+    // Validate fields
+    if (!form.title.trim()) {
+      toast.error('Please enter a title for your request');
+      return;
+    }
+    if (!form.description.trim()) {
+      toast.error('Please describe the issue');
+      return;
+    }
+
+    if (!profile) {
+      toast.error('Please sign in to submit service requests');
+      return;
+    }
+
     const category = (form.category || aiSuggestion?.category || 'OTHER') as ServiceRequestCategory;
     setSubmitting(true);
     try {
       const { error } = await supabase.from('service_requests').insert({
         customer_id: profile.id,
-        booking_id: activeBookingId,
-        title: form.title,
-        description: form.description,
+        booking_id: activeBookingId ?? null,
+        title: form.title.trim(),
+        description: form.description.trim(),
         category,
         priority: 'MEDIUM',
         status: 'PENDING',
         ai_confidence: aiSuggestion?.confidence ?? null,
       });
       if (error) throw error;
-      toast.success('Service request submitted!');
+      toast.success('Service request submitted successfully!');
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Submission failed');
+      const msg = err instanceof Error ? err.message : 'Submission failed';
+      if (msg.includes('violates foreign key')) {
+        toast.error('Account not found in database. Please register a new account.');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }

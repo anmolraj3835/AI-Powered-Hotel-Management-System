@@ -1,23 +1,46 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseOffline } from '@/lib/supabase';
+import { MockDB } from '@/lib/mockData';
 import toast from 'react-hot-toast';
 import type { Booking } from '@/types/database';
 
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const offline = isSupabaseOffline;
 
   async function load() {
-    const { data } = await supabase.from('bookings').select('*, rooms(room_number, room_type), profiles(full_name, email)').order('created_at', { ascending: false });
-    setBookings((data ?? []) as Booking[]);
-    setLoading(false);
+    if (offline) {
+      setBookings(MockDB.getBookings() as Booking[]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data } = await supabase.from('bookings').select('*, rooms(room_number, room_type), profiles(full_name, email)').order('created_at', { ascending: false });
+      const list = (data ?? []) as Booking[];
+      setBookings(list.length > 0 ? list : (MockDB.getBookings() as Booking[]));
+    } catch {
+      setBookings(MockDB.getBookings() as Booking[]);
+    } finally {
+      setLoading(false);
+    }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [offline]);
 
   async function updateStatus(id: string, status: string) {
+    if (offline) {
+      MockDB.updateBooking(id, { status: status as Booking['status'] });
+      if (status === 'CHECKED_OUT') {
+        const b = bookings.find(x => x.id === id);
+        if (b) MockDB.updateRoom(b.room_id, { status: 'CLEANING' });
+      }
+      toast.success('Booking updated (Demo mode)');
+      load();
+      return;
+    }
+
     const updates: Record<string, string> = { status, updated_at: new Date().toISOString() };
     if (status === 'CHECKED_OUT') {
-      // Free the room
       const b = bookings.find(x => x.id === id);
       if (b) await supabase.from('rooms').update({ status: 'CLEANING' }).eq('id', b.room_id);
     }
